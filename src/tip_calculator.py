@@ -7,6 +7,61 @@ Created on Oct 29, 2014
 import tip_calculator_GUIs
 import tip_icon
 import wx
+from wx.lib.pubsub import Publisher as pub
+
+class tip_calculator_model:
+    def __init__(self):
+        self.bill_total=0
+        self.bill_deduct=0
+        self.bill_tax=0
+        self.tip_rate=0
+        pub.subscribe(self.calculate_tip_total(),"TIP PROP CHANGE")
+
+    def changed_bill_prop(self,prop,value):
+        '''prop=["total","deduct","tax"]'''
+        self.billprop=value
+        self.calculate_tip_total()
+
+    def drange(self, start, stop):
+        this_start = start
+        step=(stop-start)/10.0
+        stop=stop+step
+        this_range=[]
+        while this_start < stop:
+            this_range.append(this_start)
+            this_start += step
+        return this_range
+    
+    def changed_tip_prop(self,prop,value):
+        '''prop=["max","min","percentage"]'''
+        self.tipprop=value
+        self.calculate_tip_rate()
+
+    def calculate_tip_rate(self,tip_rate):
+        #tip_max,tip_min,tip_percentage        "TIP RATE CHANGE"
+        if tip_rate is None:
+            self.range_tip=self.drange(self.tip_min, self.tip_max)
+            try:
+                tip_rate=range_tip[self.tip_percentage]
+            except IndexError:
+                return
+        self.tip_rate=round(tip_rate,2)
+        pub.sendMessage("TIP RATE CHANGE",self.tip_rate)
+#        self.calculate_tip_total()
+#        pub.sendMessage("TIP PROP CHANGE")
+
+    def calculate_tip_total(self):
+        #tip_rate,tip_deduct,tip_tax        "TIP PROP CHANGE"
+        total=(self.bill_total-self.bill_deduct+self.bill_tax)*self.tip_rate
+        self.tip_total=round(total,2)
+        pub.sendMessage("TIP PROP CHANGE", self.tip_total)
+#        self.calculate_bill_total()
+
+    def calculate_bill_total(self):
+        #bill_total,bill_deduct,bill_tax,tip_total    "BILL PROP CHANGE"
+        total=self.bill_total-self.bill_deduct+self.bill_tax+self.tip_total
+        self.total=round(total,2)
+        pub.sendMessage("BILL UPDATED",self.total)
 
 class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
     '''
