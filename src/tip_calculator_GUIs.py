@@ -175,7 +175,7 @@ class tip_calculator_mainframe(wx.Frame):
         titlesizer.Add(sizer_bill, wx.GBPosition(3, 0),
                        wx.GBSpan(1, 2), wx.EXPAND, 5)
 
-        self.bill_total = wx.TextCtrl(self, wx.ID_ANY, u"0",
+        self.bill_total = wx.TextCtrl(self, wx.ID_ANY, u"1.00",
                                       wx.DefaultPosition, wx.Size(60, -1),
                                       wx.TE_CENTRE,
                                       validator=CharValidator('no-alpha'))
@@ -386,32 +386,95 @@ class tip_calculator_mainframe(wx.Frame):
 
         # Connect Events
         self.tip_tailor.Bind(wx.EVT_CHECKBOX, self.click_tip_tailor)
-        self.tip_min.Bind(wx.EVT_TEXT, self.click_tip_min)
-        self.tip_min.Bind(wx.EVT_KEY_UP, self.click_tip_min)
+        self.tip_min.Bind(wx.EVT_TEXT, lambda event, name="tip_min":
+                              self.update_value(event,name))
+        self.tip_min.Bind(wx.EVT_KEY_UP, lambda event, name="tip_min":
+                              self.update_value(event,name))
         self.tip_percentage.Bind(wx.EVT_SCROLL_CHANGED,
-                                 self.click_tip_percentage)
-        self.tip_max.Bind(wx.EVT_TEXT, self.click_tip_max)
-        self.tip_max.Bind(wx.EVT_KEY_UP, self.click_tip_max)
-        self.bill_total.Bind(wx.EVT_TEXT, self.click_bill_total)
-        self.bill_total.Bind(wx.EVT_KEY_UP, self.click_bill_total)
-        self.bill_deduct.Bind(wx.EVT_TEXT, self.click_bill_deduct)
-        self.bill_deduct.Bind(wx.EVT_KEY_UP, self.click_bill_deduct)
-        self.bill_tax.Bind(wx.EVT_TEXT, self.click_bill_tax)
-        self.bill_tax.Bind(wx.EVT_KEY_UP, self.click_bill_tax)
-        self.tip_deduct.Bind(wx.EVT_CHECKBOX, self.click_tip_deduct)
-        self.tip_tax.Bind(wx.EVT_CHECKBOX, self.click_tip_tax)
-        self.tip_rate.Bind(wx.EVT_KEY_UP, self.click_tip_rate)
+                                 lambda event, name="tip_percentage":
+                              self.update_value(event,name))
+        self.tip_max.Bind(wx.EVT_TEXT, lambda event, name="tip_max":
+                              self.update_value(event,name))
+        self.tip_max.Bind(wx.EVT_KEY_UP, lambda event, name="tip_max":
+                              self.update_value(event,name))
+        self.bill_total.Bind(wx.EVT_TEXT, lambda event, name="bill_total":
+                              self.update_value(event,name))
+        self.bill_total.Bind(wx.EVT_KEY_UP, lambda event, name="bill_total":
+                              self.update_value(event,name))
+        self.bill_deduct.Bind(wx.EVT_TEXT, lambda event, name="bill_deduct":
+                              self.update_value(event,name))
+        self.bill_deduct.Bind(wx.EVT_KEY_UP, lambda event, name="bill_deduct":
+                              self.update_value(event,name))
+        self.bill_tax.Bind(wx.EVT_TEXT, lambda event, name="bill_tax":
+                              self.update_value(event,name))
+        self.bill_tax.Bind(wx.EVT_KEY_UP, lambda event, name="bill_tax":
+                              self.update_value(event,name))
+        self.tip_deduct.Bind(wx.EVT_CHECKBOX, lambda event, name="tip_deduct":
+                              self.update_value(event,name))
+        self.tip_tax.Bind(wx.EVT_CHECKBOX, lambda event, name="tip_tax":
+                              self.update_value(event,name))
+        self.tip_rate.Bind(wx.EVT_KEY_UP, lambda event, name="tip_rate":
+                              self.update_value(event,name))
         self.tip_tailor_button.Bind(wx.EVT_BUTTON, self.click_tip_tailor)
-        self.number_guest.Bind(wx.EVT_TEXT, self.click_number_guest)
-        self.number_guest.Bind(wx.EVT_KEY_UP, self.click_number_guest)
+        self.number_guest.Bind(wx.EVT_TEXT, lambda event, name="number_guest":
+                              self.update_value(event,name))
+        self.number_guest.Bind(wx.EVT_KEY_UP, lambda event, name="number_guest":
+                              self.update_value(event,name))
         self.settings.Bind(wx.EVT_TOGGLEBUTTON, self.click_settings)
         self.tip_rate_manual.Bind(wx.EVT_CHECKBOX, self.click_tip_rate_manual)
 
     def __del__(self):
         pass
 
+    def get_value(self,obj):
+        print obj.GetName(),obj.GetValue()
+        try:
+            return float(obj.GetValue())
+        except ValueError:
+            return 0.0
+
+    def set_value(self,name,value):
+        obj=getattr(self, name)
+        type = obj.GetName()
+        if type == "text":
+            obj.SetValue(str(value))
+        elif type == "staticText":
+            obj.SetLabel(str(value))
+
+    def validation_error(self,name):
+        message_dict={
+                      "bill_total":"The total must be greater than zero."
+                                   "\nCLICK OK.",
+                        "number_guest":"There must be more than"
+                                   " 0 guests.",
+                        "bill_tax":"The tax amount MUST be less"
+                                   " than the total bill.",
+                        "bill_deduct":"The deduction amount MUST be less"
+                                   " than the total bill.",
+                        "tip_max":"The Maximum tip MUST be greater"
+                                   " than the Minimum tip."
+                      }
+        message=message_dict[name]
+        dlg = wx.MessageDialog(None,
+                                   message,
+                                   "Value Error",
+                                   wx.OK|wx.ICON_ERROR)
+        dlg.ShowModal()
+        if name == "number_guest" or name == "bill_total":
+            self.set_value(name, 1)
+        elif name != "tip_max":
+            self.set_value(name, 0)
+        elif name == "tip_max":
+            min=getattr(self, "tip_min")
+#            min.SetEvtHandlerEnabled(False)
+            self.set_value("tip_min", self.tip_min_default)
+#            min.SetEvtHandlerEnabled(True)
+            self.set_value("tip_max", self.tip_max_default)
 
     # Virtual event handlers, overide them in your derived class
+    def update_value(self, event, name):
+        event.Skip()
+
     def click_tip_tailor(self, event):
         event.Skip()
 
@@ -424,7 +487,7 @@ class tip_calculator_mainframe(wx.Frame):
     def click_tip_max(self, event):
         event.Skip()
 
-    def click_bill_total(self, event):
+    def click_bill_total(self, event,name):
         event.Skip()
 
     def click_bill_deduct(self, event):

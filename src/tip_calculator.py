@@ -7,20 +7,48 @@ Created on Oct 29, 2014
 import tip_calculator_GUIs
 import tip_icon
 import wx
-from wx.lib.pubsub import Publisher as pub
+from wx.lib.pubsub import setupkwargs
+from wx.lib.pubsub import pub
 
 class tip_calculator_model:
     def __init__(self):
-        self.bill_total=0
+        self.bill_total=1
         self.bill_deduct=0
         self.bill_tax=0
         self.tip_rate=0
-        pub.subscribe(self.calculate_tip_total(),"TIP PROP CHANGE")
+        self.tip_min=0.0
+        self.tip_max=20.0
+        self.tip_percentage=5
+        self.number_guest=1
+        self.tip_total=0
+        self.tip_deduct=1
+        self.tip_tax=0
 
-    def changed_bill_prop(self,prop,value):
-        '''prop=["total","deduct","tax"]'''
-        self.billprop=value
-        self.calculate_tip_total()
+    def validate_all(self):
+        if self.bill_total == 0:
+            pub.sendMessage("error", name="bill_total")
+        if self.number_guest == 0: 
+            pub.sendMessage("error", name="number_guest")
+        if self.bill_tax >= self.bill_total and self.bill_total != 0: 
+            pub.sendMessage("error", name="bill_tax")
+        if self.bill_deduct >= self.bill_total and self.bill_total != 0:
+            pub.sendMessage("error", name="bill_deduct")
+        if self.tip_max <= self.tip_min and len(str(self.tip_max)) > 3:
+            pub.sendMessage("error", name="tip_max")
+            #Need a better way to handle max of single digit less than min
+            #Otherwise get error when trying to just type max
+
+    def changed_prop(self,name,value):
+        '''bill=["total","deduct","tax"]'''
+        '''tip=["max","min","percentage"]'''
+        setattr(self,name,value)
+        self.validate_all()
+        type=name.split("_")
+        if type[0] == "bill":
+            self.calculate_tip_total()
+        elif type[0] == "tip" and type[1] != "rate":
+            self.calculate_tip_rate()
+        else: self.calculate_bill_total()
 
     def drange(self, start, stop):
         this_start = start
@@ -31,37 +59,42 @@ class tip_calculator_model:
             this_range.append(this_start)
             this_start += step
         return this_range
-    
-    def changed_tip_prop(self,prop,value):
-        '''prop=["max","min","percentage"]'''
-        self.tipprop=value
-        self.calculate_tip_rate()
 
-    def calculate_tip_rate(self,tip_rate):
-        #tip_max,tip_min,tip_percentage        "TIP RATE CHANGE"
-        if tip_rate is None:
-            self.range_tip=self.drange(self.tip_min, self.tip_max)
-            try:
-                tip_rate=range_tip[self.tip_percentage]
-            except IndexError:
-                return
+    def calculate_tip_rate(self):
+        self.range_tip=self.drange(self.tip_min, self.tip_max)
+        try:
+            tip_rate=self.range_tip[int(self.tip_percentage)]
+        except IndexError:
+            return
         self.tip_rate=round(tip_rate,2)
-        pub.sendMessage("TIP RATE CHANGE",self.tip_rate)
-#        self.calculate_tip_total()
-#        pub.sendMessage("TIP PROP CHANGE")
+        pub.sendMessage("update", name="tip_rate",value=self.tip_rate)
+        self.calculate_tip_total()
 
     def calculate_tip_total(self):
-        #tip_rate,tip_deduct,tip_tax        "TIP PROP CHANGE"
-        total=(self.bill_total-self.bill_deduct+self.bill_tax)*self.tip_rate
+        rate=self.tip_rate/100.0
+        if self.tip_deduct:
+            bill_deduct=self.bill_deduct
+        else:
+            bill_deduct=0
+        if self.tip_tax:
+            bill_tax=self.bill_tax
+        else:
+            bill_tax=0
+        total=(self.bill_total-bill_deduct+bill_tax)*rate
         self.tip_total=round(total,2)
-        pub.sendMessage("TIP PROP CHANGE", self.tip_total)
-#        self.calculate_bill_total()
+        pub.sendMessage("update", name="tip_total", value=self.tip_total)
+        self.calculate_bill_total()
+
+    def calculate_tip_person(self):
+        person_tip=self.tip_total/self.number_guest
+        self.tip_person=round(person_tip,2)
+        pub.sendMessage("update", name="tip_person", value=self.tip_person)
 
     def calculate_bill_total(self):
-        #bill_total,bill_deduct,bill_tax,tip_total    "BILL PROP CHANGE"
+        self.calculate_tip_person()
         total=self.bill_total-self.bill_deduct+self.bill_tax+self.tip_total
         self.total=round(total,2)
-        pub.sendMessage("BILL UPDATED",self.total)
+        pub.sendMessage("update", name="total", value=self.total)
 
 class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
     '''
@@ -69,9 +102,7 @@ class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
     '''
 
     def __init__(self, parent):
-        '''
-        Constructor
-        '''
+        self.model=tip_calculator_model()
         tip_calculator_GUIs.tip_calculator_mainframe.__init__(self, parent)
         '''http://pixabay.com/en/dialog-tip-advice-hint-speaking-148815/
            http://pixabay.com/en/currency-signs-money-signs-33431/'''
@@ -79,6 +110,9 @@ class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
             item.Show(False)
         self.ico = tip_icon.gettipimg2Icon()
         self.SetIcon(self.ico)
+        pub.subscribe(self.update_view,"update")
+        pub.subscribe(self.update_view_error,"error")
+        self.model.calculate_tip_rate()
 
     def click_tip_tailor(self, event):
         checked = self.tip_tailor.IsChecked()
@@ -107,39 +141,6 @@ class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
         self.tip_tailor_button.Show(checked)
         self.Layout()
 
-    def click_tip_min(self, event):
-        try:
-            self.validate_minmax()
-            self.calculate_all()
-        except ValueError:
-            pass
-
-    def click_tip_percentage(self, event):
-        self.calculate_all()
-
-    def click_tip_max(self, event):
-        try:
-            self.validate_minmax()
-            self.calculate_all()
-        except ValueError:
-            pass
-
-    def calculate_tip_rate(self):
-        if self.tip_rate_manual.GetValue():
-            return
-        try:
-            this_max=float(self.tip_max.GetValue())
-            this_min=float(self.tip_min.GetValue())
-        except ValueError:
-            return
-        percent=self.tip_percentage.GetValue()
-        range_tip=self.drange(this_min, this_max)
-        try:
-            tip_rate=range_tip[percent]
-        except IndexError:
-            return
-        self.tip_rate.SetValue(str(round(tip_rate,2)))
-
     def calculate_tip_rate_tailor(self):
         tip_total=float(self.tip_total.GetLabel())
         bill_total=self.get_bill()
@@ -148,164 +149,6 @@ class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
         except ZeroDivisionError:
             return
         self.tip_rate.SetValue(str(tip_rate*100))
-
-    def drange(self, start, stop):
-        this_start = start
-        step=(stop-start)/10.0
-        stop=stop+step
-        this_range=[]
-        while this_start < stop:
-            this_range.append(this_start)
-            this_start += step
-        return this_range
-
-    def get_deduct(self):
-        try:
-            return float(self.bill_deduct.GetValue())
-        except ValueError:
-            return 0
-
-    def get_deduct_tip(self):
-        try:
-            if self.tip_deduct.GetValue():
-                    return self.get_deduct()
-            else:
-                return 0
-        except ValueError:
-            return
-
-    def get_tax(self):
-        try:
-            return float(self.bill_tax.GetValue())
-        except ValueError:
-            return 0
-
-    def get_tax_tip(self):
-        if self.tip_tax.GetValue():
-            return self.get_tax()
-        else:
-            return 0
-
-    def get_bill(self):
-        try:
-            return float(self.bill_total.GetValue())
-        except ValueError:
-            return 0
-
-    def get_guests(self):
-        try:
-            return float(self.number_guest.GetValue())
-        except ValueError:
-            return None
-
-    def calculate_tip_total(self):
-        try:
-            bill_total=self.get_bill()
-            tip_rate=float(self.tip_rate.GetValue())/100.0
-            bill_deduct=self.get_deduct_tip()
-            bill_tax=self.get_tax_tip()
-        except ValueError:
-            return
-
-        total=(bill_total-bill_deduct+bill_tax)*tip_rate
-        self.tip_total.SetLabel(str(round(total,2)))
-
-    def calculate_tip_person(self):
-        try:
-            number_guest=self.get_guests()
-            if number_guest is None:
-                return
-            tip_total=float(self.tip_total.GetLabel())
-        except ValueError:
-            return
-        person_tip=tip_total/number_guest
-        self.tip_person.SetLabel(str(round(person_tip,2)))
-
-    def calculate_bill_total(self):
-        try:
-            bill_total=float(self.bill_total.GetValue())
-            tip_total=float(self.tip_total.GetLabel())
-            bill_deduct=float(self.bill_deduct.GetValue())
-            bill_tax=float(self.bill_tax.GetValue())
-        except ValueError: return
-        total=bill_total-bill_deduct+bill_tax+tip_total
-        self.total.SetLabel(str(round(total,2)))
-
-    def validate_minmax(self):
-        this_max=float(self.tip_max.GetValue())
-        this_min=float(self.tip_min.GetValue())
-        if this_max <= this_min and len(str(this_max)) > 3:
-            #Need a better way to handle max of single digit less than min
-            #Otherwise get error when trying to just type max
-            dlg = wx.MessageDialog(None,
-                                   "The Maximum tip MUST be greater"
-                                   " than the Minimum tip.",
-                                   "Value Error",
-                                   wx.OK|wx.ICON_ERROR)
-            dlg.ShowModal()
-            if this_max == 0:
-                self.tip_max.SetValue(self.tip_max_default)
-            self.tip_min.SetValue(self.tip_min_default)
-            self.tip_max.SetValue(self.tip_max_default)
-            raise ValueError
-
-    def validate_total(self):
-        total=self.get_bill()
-        if total == 0:
-            dlg = wx.MessageDialog(None,
-                                   "The total must be greater than zero."
-                                   "\nCLICK OK.",
-                                   "Value Error",
-                                   wx.OK|wx.ICON_ERROR)
-            dlg.ShowModal()
-            raise ValueError
-
-    def validate_deduct(self):
-        tip_deduct=self.get_deduct()
-        total=self.get_bill()
-        if tip_deduct >= total and total != 0:
-            dlg = wx.MessageDialog(None,
-                                   "The deduction amount MUST be less"
-                                   " than the total bill.",
-                                   "Value Error",
-                                   wx.OK|wx.ICON_ERROR)
-            dlg.ShowModal()
-            self.bill_deduct.SetValue("0")
-            raise ValueError
-
-    def validate_tax(self):
-        tip_tax=self.get_tax()
-        total=self.get_bill()
-        if tip_tax >= total and total != 0:
-            dlg = wx.MessageDialog(None,
-                                   "The tax amount MUST be less"
-                                   " than the total bill.",
-                                   "Value Error",
-                                   wx.OK|wx.ICON_ERROR)
-            dlg.ShowModal()
-            self.bill_tax.SetValue("0")
-            raise ValueError
-
-    def validate_guest(self):
-        guests=self.get_guests()
-        if guests == 0:
-            dlg = wx.MessageDialog(None,
-                                   "There must be more than"
-                                   " 0 guests.",
-                                   "Value Error",
-                                   wx.OK|wx.ICON_ERROR)
-            dlg.ShowModal()
-            self.number_guest.SetValue("1")
-            raise ValueError
-
-    def calculate_all(self):
-        try:
-            self.tailor_instance.calculate_all()
-        except AttributeError:
-            self.calculate_tip_rate()
-            self.calculate_tip_total()
-            self.calculate_tip_person()
-        self.calculate_bill_total()
 
     def click_settings(self, event):
         checked = self.settings.GetValue()
@@ -323,46 +166,16 @@ class tip_calculator_main(tip_calculator_GUIs.tip_calculator_mainframe):
         if not checked:
             self.calculate_all()
 
-    def click_bill_total(self, event):
-        try:
-            self.validate_total()
-            self.validate_deduct()
-            self.validate_tax()
-            self.calculate_all()
-        except ValueError:
-            pass
+    def update_value(self, event, name):
+        obj=event.GetEventObject()
+        value = self.get_value(obj)
+        self.model.changed_prop(name, value)
 
-    def click_bill_deduct(self, event):
-        try:
-            self.validate_total()
-            self.validate_deduct()
-            self.calculate_all()
-        except ValueError:
-            pass    
+    def update_view(self, name, value):
+        self.set_value(name, value)
 
-    def click_bill_tax(self, event):
-        try:
-            self.validate_total()
-            self.validate_tax()
-            self.calculate_all()
-        except ValueError:
-            pass
-
-    def click_tip_deduct(self, event):
-        self.calculate_all()
-
-    def click_tip_rate(self, event):
-        self.calculate_all()
-
-    def click_tip_tax(self, event):
-        self.calculate_all()
-
-    def click_number_guest(self, event):
-        try:
-            self.validate_guest()
-            self.calculate_all()
-        except ValueError:
-            pass
+    def update_view_error(self,name):
+        self.validation_error(name)
 
 class tip_tailor_main(tip_calculator_GUIs.tip_tailor_dialog):
     def __init__(self,parent,number_guests):
