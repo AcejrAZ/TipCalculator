@@ -5,11 +5,11 @@ Created on Oct 29, 2014
 '''
 
 import wx
-from tip_calculator import tip_calculator_main
+from tip_calculator import controller_tip_calculator
 
 class main(wx.App):
     def OnInit(self):
-        self.m_frame = tip_calculator_main(None)
+        self.m_frame = controller_tip_calculator(None)
         self.m_frame.Show()
         self.SetTopWindow(self.m_frame)
         return True

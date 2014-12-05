@@ -385,7 +385,6 @@ class tip_calculator_mainframe(wx.Frame):
         self.Centre(wx.BOTH)
 
         # Connect Events
-        self.tip_tailor.Bind(wx.EVT_CHECKBOX, self.click_tip_tailor)
         self.tip_min.Bind(wx.EVT_TEXT, lambda event, name="tip_min":
                               self.update_value(event,name))
         self.tip_min.Bind(wx.EVT_KEY_UP, lambda event, name="tip_min":
@@ -416,6 +415,7 @@ class tip_calculator_mainframe(wx.Frame):
         self.tip_rate.Bind(wx.EVT_KEY_UP, lambda event, name="tip_rate":
                               self.update_value(event,name))
         self.tip_tailor_button.Bind(wx.EVT_BUTTON, self.click_tip_tailor)
+        self.tip_tailor.Bind(wx.EVT_CHECKBOX, self.click_tip_tailor)
         self.number_guest.Bind(wx.EVT_TEXT, lambda event, name="number_guest":
                               self.update_value(event,name))
         self.number_guest.Bind(wx.EVT_KEY_UP, lambda event, name="number_guest":
@@ -427,7 +427,6 @@ class tip_calculator_mainframe(wx.Frame):
         pass
 
     def get_value(self,obj):
-        print obj.GetName(),obj.GetValue()
         try:
             return float(obj.GetValue())
         except ValueError:
@@ -478,38 +477,15 @@ class tip_calculator_mainframe(wx.Frame):
     def click_tip_tailor(self, event):
         event.Skip()
 
-    def click_tip_min(self, event):
-        event.Skip()
-
-    def click_tip_percentage(self, event):
-        event.Skip()
-
-    def click_tip_max(self, event):
-        event.Skip()
-
-    def click_bill_total(self, event,name):
-        event.Skip()
-
-    def click_bill_deduct(self, event):
-        event.Skip()
-
-    def click_bill_tax(self, event):
-        event.Skip()
-
-    def click_tip_deduct(self, event):
-        event.Skip()
-
-    def click_tip_rate(self, event):
-        event.Skip()
-
-    def click_tip_tax(self, event):
-        event.Skip()
-
-    def click_number_guest(self, event):
-        event.Skip()
-
     def click_settings(self, event):
-        event.Skip()
+        checked = self.settings.GetValue()
+        for item in self.advanced:
+            item.Show(checked)
+        if not checked:
+            self.settings.SetLabel("Show Configuration Settings")
+        else:
+            self.settings.SetLabel("Hide Configuration Settings")
+        self.Layout()
 
     def click_tip_rate_manual(self, event):
         event.Skip()
@@ -580,25 +556,9 @@ class tip_tailor_dialog(wx.Dialog):
         for person_num in range(int(number_guests)):
             name=wx.TextCtrl(self, wx.ID_ANY, u"Name "+str(person_num),
                                       wx.DefaultPosition, wx.DefaultSize, 0)
-#            setattr(self, "name_"+str(person_num), control)
-##            self.name_1 = wx.TextCtrl(self, wx.ID_ANY, u"Name 1",
-##                                      wx.DefaultPosition, wx.DefaultSize, 0)
-#            thiscontrol=getattr(self, "name_"+str(person_num))
             row = 1 + person_num*2
             gbsizer3.Add(name, wx.GBPosition(row, 0),
                          wx.GBSpan(2, 1), wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5)
-
-            bill_total = wx.TextCtrl(self, wx.ID_ANY, u"0.0",
-                                            wx.DefaultPosition, wx.Size(-1, -1),
-                                            wx.TE_CENTRE,
-                                            validator=CharValidator('no-alpha'))
-            bill_total.SetToolTipString(u"The amount this person "
-                                                    "owes from the bill.")
-            bill_total.Hide()
-            #Unhide for bill per person
-
-            gbsizer3.Add(bill_total, wx.GBPosition(row, 1),
-                         wx.GBSpan(2, 1), wx.ALIGN_CENTER|wx.ALL, 5)
 
             tip_percentage = wx.Slider(self, wx.ID_ANY, 5, 0, 10,
                                               wx.DefaultPosition, wx.DefaultSize,
@@ -630,36 +590,50 @@ class tip_tailor_dialog(wx.Dialog):
 
             gbsizer3.Add(total, wx.GBPosition(row, 4),
                          wx.GBSpan(2, 1), wx.ALIGN_CENTER|wx.ALL, 5)
-            self.objectdict["person"+str(person_num)]=[name,
-                                                       bill_total,
-                                                       tip_percentage,
-                                                       tip_total,
-                                                       total
-                                                       ]
+            self.objectdict[person_num]=[name,tip_percentage,
+                                         tip_total,
+                                         total]
             name.Bind(wx.EVT_TEXT, self.click_name)
             name.Bind(wx.EVT_TEXT_ENTER, self.click_name)
-            bill_total.Bind(wx.EVT_TEXT, self.click_bill_total)
-            bill_total.Bind(wx.EVT_TEXT_ENTER, self.click_bill_total)
-            tip_percentage.Bind(wx.EVT_SCROLL, self.click_tip_percentage)
+            tip_percentage.Bind(wx.EVT_SCROLL, lambda event, 
+                                name="tip_percentage", num=person_num:
+                                self.update_value(event, name, num))
             tip_percentage.Bind(wx.EVT_SCROLL_CHANGED,
-                                   self.click_tip_percentage)
+                                   lambda event, name="tip_percentage", num=person_num:
+                                   self.update_value(event, name, num))
 
         self.SetSizer(gbsizer3)
         self.Layout()
 
         self.Centre(wx.BOTH)
 
+        self.objectnames=["name",
+                         "tip_percentage",
+                         "tip_total","total"]
+
     def __del__(self):
         pass
+
+    def set_value(self,name,num,value):
+        objects=self.objectdict[num]
+        obj=objects[self.objectnames.index(name)]
+        type = obj.GetName()
+        if type == "text":
+            obj.SetValue(str(value))
+        elif type == "staticText":
+            obj.SetLabel(str(value))
+
+    def get_value(self,obj):
+        try:
+            return float(obj.GetValue())
+        except ValueError:
+            return 0.0
 
     # Virtual event handlers, overide them in your derived class
     def click_name(self, event):
         event.Skip()
 
-    def click_bill_total(self, event):
-        event.Skip()
-
-    def click_tip_percentage(self, event):
+    def update_value(self, event, name, num):
         event.Skip()
 
 
