@@ -486,6 +486,14 @@ class tip_calculator_mainframe(wx.Frame):
         else:
             self.settings.SetLabel("Hide Configuration Settings")
         self.Layout()
+        
+    def on_click_tailor(self, checked):
+        self.tip_percentage.Enable(not checked)
+        self.tip_rate_manual.SetValue(0)
+        self.tip_person.Show(not checked)
+        self.click_tip_rate_manual(0)
+        self.tip_tailor_button.Show(checked)
+        self.Layout()
 
     def click_tip_rate_manual(self, event):
         event.Skip()

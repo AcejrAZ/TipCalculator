@@ -53,7 +53,7 @@ class model_tip_calculator:
         type=name.split("_")
         if type[0] == "bill":
             self.get_tip_total()
-        elif type[0] == "tip" and type[1] != "rate":
+        elif type[0] == "tip":# and type[1] != "rate":
             self.calculate_tip_rate()
         else: self.calculate_bill_total()
 
@@ -125,10 +125,17 @@ class model_tip_calculator:
         pub.sendMessage("update", name="total", value=self.total)
 
     def calcualte_tip_rate_person(self):
-        total=self.total-self.tip_total
+        if self.tip_deduct:
+            bill_deduct=0
+        else:
+            bill_deduct=self.bill_deduct
+        if self.tip_tax:
+            bill_tax=0
+        else:
+            bill_tax=self.bill_tax
+        total=self.total-self.tip_total+bill_deduct-bill_tax
         self.tip_rate=self.tip_total/total
         value=self.tip_rate*100.0
-        print value
         pub.sendMessage("update", name="tip_rate",value=value)
 
     def get_tip_total(self):
@@ -190,14 +197,16 @@ class controller_tip_calculator(tip_calculator_GUIs.tip_calculator_mainframe):
         pub.subscribe(self.update_view,"update")
         pub.subscribe(self.update_view_error,"error")
         self.model.calculate_tip_rate()
+        self.click_settings(0)
+        self.tailor_instance=None
 
     def click_tip_tailor(self, event):
         checked = self.tip_tailor.IsChecked()
         if checked:
-            try:
+            if self.tailor_instance is not None:
                 self.tailor_instance.Show()
                 self.tailor_instance.Raise()
-            except AttributeError:
+            else:
                 number_guest=self.model.get_value("number_guest")
                 self.tailor_instance = controller_tip_tailor(self, number_guest)
                 self.tailor_instance.Fit()
@@ -207,11 +216,9 @@ class controller_tip_calculator(tip_calculator_GUIs.tip_calculator_mainframe):
             #"Do you want to stop tailoring tips? Y/N"
             self.tailor_instance.Destroy()
             self.tailor_instance=None
-        self.tip_percentage.Enable(not checked)
-        self.tip_person.Show(not checked)
-        self.tip_tailor_button.Show(checked)
         self.model.changed_prop("tip_tailor", checked)
-        self.Layout()
+        self.on_click_tailor(checked)
+
 
     def click_tip_rate_manual(self, event):
         checked=self.tip_rate_manual.GetValue()
@@ -221,6 +228,9 @@ class controller_tip_calculator(tip_calculator_GUIs.tip_calculator_mainframe):
     def update_value(self, event, name):
         obj=event.GetEventObject()
         value = self.get_value(obj)
+        if name == "number_guest" and self.tailor_instance is not None:
+            self.tip_tailor.SetValue(0)
+            self.click_tip_tailor(0)
         self.model.changed_prop(name, value)
 
     def update_view(self, name, value):
